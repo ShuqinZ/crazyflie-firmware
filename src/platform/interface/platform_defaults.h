@@ -146,7 +146,7 @@
 
 // Tumble detection settings
 #ifndef SUPERVISOR_TUMBLE_CHECK_ENABLE
-    #define SUPERVISOR_TUMBLE_CHECK_ENABLE false
+    #define SUPERVISOR_TUMBLE_CHECK_ENABLE true
 #endif
 
 // 60 degrees tilt (when stationary)
