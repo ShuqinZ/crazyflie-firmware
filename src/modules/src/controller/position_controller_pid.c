@@ -24,16 +24,15 @@
  * position_estimator_pid.c: PID-based implementation of the position controller
  */
 
-#include <math.h>
 #include "num.h"
+#include <math.h>
 
 #include "log.h"
+#include "num.h"
 #include "param.h"
 #include "pid.h"
-#include "num.h"
-#include "position_controller.h"
 #include "platform_defaults.h"
-
+#include "position_controller.h"
 
 struct pidAxis_s {
   PidObject pid;
@@ -53,7 +52,8 @@ struct this_s {
   struct pidAxis_s pidY;
   struct pidAxis_s pidZ;
 
-  uint16_t thrustBase; // approximate throttle needed when in perfect hover. More weight/older battery can use a higher value
+  uint16_t thrustBase; // approximate throttle needed when in perfect hover.
+                       // More weight/older battery can use a higher value
   uint16_t thrustMin;  // Minimum thrust value to output
 };
 
@@ -69,7 +69,7 @@ static float velMaxOverhead = 1.10f;
 
 static const float thrustScale = 1000.0f;
 
-#define DT (float)(1.0f/POSITION_RATE)
+#define DT (float)(1.0f / POSITION_RATE)
 static bool posFiltEnable = PID_POS_XY_FILT_ENABLE;
 static bool velFiltEnable = PID_VEL_XY_FILT_ENABLE;
 static float posFiltCutoff = PID_POS_XY_FILT_CUTOFF;
@@ -85,125 +85,165 @@ static float velZFiltCutoff = PID_VEL_Z_FILT_CUTOFF;
 
 #ifndef UNIT_TEST
 static struct this_s this = {
-  .pidVX = {
-    .pid = {
-      .kp = PID_VEL_X_KP,
-      .ki = PID_VEL_X_KI,
-      .kd = PID_VEL_X_KD,
-      .kff = PID_VEL_X_KFF,
-    },
-    .pid.dt = DT,
-  },
+    .pidVX =
+        {
+            .pid =
+                {
+                    .kp = PID_VEL_X_KP,
+                    .ki = PID_VEL_X_KI,
+                    .kd = PID_VEL_X_KD,
+                    .kff = PID_VEL_X_KFF,
+                },
+            .pid.dt = DT,
+        },
 
-  .pidVY = {
-    .pid = {
-      .kp = PID_VEL_Y_KP,
-      .ki = PID_VEL_Y_KI,
-      .kd = PID_VEL_Y_KD,
-      .kff = PID_VEL_Y_KFF,
-    },
-    .pid.dt = DT,
-  },
-  #if CONFIG_CONTROLLER_PID_IMPROVED_BARO_Z_HOLD
-    .pidVZ = {
-      .pid = {
-        .kp = PID_VEL_Z_KP_BARO_Z_HOLD,
-        .ki = PID_VEL_Z_KI_BARO_Z_HOLD,
-        .kd = PID_VEL_Z_KD_BARO_Z_HOLD,
-        .kff = PID_VEL_Z_KFF_BARO_Z_HOLD,
-      },
-      .pid.dt = DT,
-    },
-  #else
-    .pidVZ = {
-      .pid = {
-        .kp = PID_VEL_Z_KP,
-        .ki = PID_VEL_Z_KI,
-        .kd = PID_VEL_Z_KD,
-        .kff = PID_VEL_Z_KFF,
-      },
-      .pid.dt = DT,
-    },
-  #endif
-  .pidX = {
-    .pid = {
-      .kp = PID_POS_X_KP,
-      .ki = PID_POS_X_KI,
-      .kd = PID_POS_X_KD,
-      .kff = PID_POS_X_KFF,
-    },
-    .pid.dt = DT,
-  },
+    .pidVY =
+        {
+            .pid =
+                {
+                    .kp = PID_VEL_Y_KP,
+                    .ki = PID_VEL_Y_KI,
+                    .kd = PID_VEL_Y_KD,
+                    .kff = PID_VEL_Y_KFF,
+                },
+            .pid.dt = DT,
+        },
+#if CONFIG_CONTROLLER_PID_IMPROVED_BARO_Z_HOLD
+    .pidVZ =
+        {
+            .pid =
+                {
+                    .kp = PID_VEL_Z_KP_BARO_Z_HOLD,
+                    .ki = PID_VEL_Z_KI_BARO_Z_HOLD,
+                    .kd = PID_VEL_Z_KD_BARO_Z_HOLD,
+                    .kff = PID_VEL_Z_KFF_BARO_Z_HOLD,
+                },
+            .pid.dt = DT,
+        },
+#else
+    .pidVZ =
+        {
+            .pid =
+                {
+                    .kp = PID_VEL_Z_KP,
+                    .ki = PID_VEL_Z_KI,
+                    .kd = PID_VEL_Z_KD,
+                    .kff = PID_VEL_Z_KFF,
+                },
+            .pid.dt = DT,
+        },
+#endif
+    .pidX =
+        {
+            .pid =
+                {
+                    .kp = PID_POS_X_KP,
+                    .ki = PID_POS_X_KI,
+                    .kd = PID_POS_X_KD,
+                    .kff = PID_POS_X_KFF,
+                },
+            .pid.dt = DT,
+        },
 
-  .pidY = {
-    .pid = {
-      .kp = PID_POS_Y_KP,
-      .ki = PID_POS_Y_KI,
-      .kd = PID_POS_Y_KD,
-      .kff = PID_POS_Y_KFF,
-    },
-    .pid.dt = DT,
-  },
+    .pidY =
+        {
+            .pid =
+                {
+                    .kp = PID_POS_Y_KP,
+                    .ki = PID_POS_Y_KI,
+                    .kd = PID_POS_Y_KD,
+                    .kff = PID_POS_Y_KFF,
+                },
+            .pid.dt = DT,
+        },
 
-  .pidZ = {
-    .pid = {
-      .kp = PID_POS_Z_KP,
-      .ki = PID_POS_Z_KI,
-      .kd = PID_POS_Z_KD,
-      .kff = PID_POS_Z_KFF,
-    },
-    .pid.dt = DT,
-  },
-  #if CONFIG_CONTROLLER_PID_IMPROVED_BARO_Z_HOLD
+    .pidZ =
+        {
+            .pid =
+                {
+                    .kp = PID_POS_Z_KP,
+                    .ki = PID_POS_Z_KI,
+                    .kd = PID_POS_Z_KD,
+                    .kff = PID_POS_Z_KFF,
+                },
+            .pid.dt = DT,
+        },
+#if CONFIG_CONTROLLER_PID_IMPROVED_BARO_Z_HOLD
     .thrustBase = PID_VEL_THRUST_BASE_BARO_Z_HOLD,
-  #else
+#else
     .thrustBase = PID_VEL_THRUST_BASE,
-  #endif
-  .thrustMin  = PID_VEL_THRUST_MIN,
+#endif
+    .thrustMin = PID_VEL_THRUST_MIN,
 };
 #endif
 
-void positionControllerInit()
-{
-  pidInit(&this.pidX.pid, this.pidX.setpoint, this.pidX.pid.kp, this.pidX.pid.ki, this.pidX.pid.kd,
-      this.pidX.pid.kff, this.pidX.pid.dt, POSITION_RATE, posFiltCutoff, posFiltEnable);
-  pidInit(&this.pidY.pid, this.pidY.setpoint, this.pidY.pid.kp, this.pidY.pid.ki, this.pidY.pid.kd,
-      this.pidY.pid.kff, this.pidY.pid.dt, POSITION_RATE, posFiltCutoff, posFiltEnable);
-  pidInit(&this.pidZ.pid, this.pidZ.setpoint, this.pidZ.pid.kp, this.pidZ.pid.ki, this.pidZ.pid.kd,
-      this.pidZ.pid.kff, this.pidZ.pid.dt, POSITION_RATE, posZFiltCutoff, posZFiltEnable);
+static uint8_t resetVelI;
+static volatile bool resetVelIRequested;
 
-  pidInit(&this.pidVX.pid, this.pidVX.setpoint, this.pidVX.pid.kp, this.pidVX.pid.ki, this.pidVX.pid.kd,
-      this.pidVX.pid.kff, this.pidVX.pid.dt, POSITION_RATE, velFiltCutoff, velFiltEnable);
-  pidInit(&this.pidVY.pid, this.pidVY.setpoint, this.pidVY.pid.kp, this.pidVY.pid.ki, this.pidVY.pid.kd,
-      this.pidVY.pid.kff, this.pidVY.pid.dt, POSITION_RATE, velFiltCutoff, velFiltEnable);
-  pidInit(&this.pidVZ.pid, this.pidVZ.setpoint, this.pidVZ.pid.kp, this.pidVZ.pid.ki, this.pidVZ.pid.kd,
-      this.pidVZ.pid.kff, this.pidVZ.pid.dt, POSITION_RATE, velZFiltCutoff, velZFiltEnable);
+static void resetPidIntegral(PidObject *pid) {
+  pid->integ = 0.0f;
+  pid->outI = 0.0f;
 }
 
-static float runPid(float input, struct pidAxis_s *axis, float setpoint, float dt) {
+static void resetHorizontalVelocityPidIntegrals(void) {
+  resetPidIntegral(&this.pidVX.pid);
+  resetPidIntegral(&this.pidVY.pid);
+}
+
+static void resetVelocityPidIntegralsParamCallback(void) {
+  if (resetVelI) {
+    resetVelIRequested = true;
+    resetVelI = 0;
+  }
+}
+
+void positionControllerInit() {
+  pidInit(&this.pidX.pid, this.pidX.setpoint, this.pidX.pid.kp,
+          this.pidX.pid.ki, this.pidX.pid.kd, this.pidX.pid.kff,
+          this.pidX.pid.dt, POSITION_RATE, posFiltCutoff, posFiltEnable);
+  pidInit(&this.pidY.pid, this.pidY.setpoint, this.pidY.pid.kp,
+          this.pidY.pid.ki, this.pidY.pid.kd, this.pidY.pid.kff,
+          this.pidY.pid.dt, POSITION_RATE, posFiltCutoff, posFiltEnable);
+  pidInit(&this.pidZ.pid, this.pidZ.setpoint, this.pidZ.pid.kp,
+          this.pidZ.pid.ki, this.pidZ.pid.kd, this.pidZ.pid.kff,
+          this.pidZ.pid.dt, POSITION_RATE, posZFiltCutoff, posZFiltEnable);
+
+  pidInit(&this.pidVX.pid, this.pidVX.setpoint, this.pidVX.pid.kp,
+          this.pidVX.pid.ki, this.pidVX.pid.kd, this.pidVX.pid.kff,
+          this.pidVX.pid.dt, POSITION_RATE, velFiltCutoff, velFiltEnable);
+  pidInit(&this.pidVY.pid, this.pidVY.setpoint, this.pidVY.pid.kp,
+          this.pidVY.pid.ki, this.pidVY.pid.kd, this.pidVY.pid.kff,
+          this.pidVY.pid.dt, POSITION_RATE, velFiltCutoff, velFiltEnable);
+  pidInit(&this.pidVZ.pid, this.pidVZ.setpoint, this.pidVZ.pid.kp,
+          this.pidVZ.pid.ki, this.pidVZ.pid.kd, this.pidVZ.pid.kff,
+          this.pidVZ.pid.dt, POSITION_RATE, velZFiltCutoff, velZFiltEnable);
+}
+
+static float runPid(float input, struct pidAxis_s *axis, float setpoint,
+                    float dt) {
   axis->setpoint = setpoint;
 
   pidSetDesired(&axis->pid, axis->setpoint);
   return pidUpdate(&axis->pid, input, false);
 }
 
-
 float state_body_x, state_body_y, state_body_vx, state_body_vy;
 
-void positionController(float* thrust, attitude_t *attitude, const setpoint_t *setpoint,
-                                                             const state_t *state)
-{
+void positionController(float *thrust, attitude_t *attitude,
+                        const setpoint_t *setpoint, const state_t *state) {
   this.pidX.pid.outputLimit = xVelMax * velMaxOverhead;
   this.pidY.pid.outputLimit = yVelMax * velMaxOverhead;
   // The ROS landing detector will prematurely trip if
   // this value is below 0.5
-  this.pidZ.pid.outputLimit = fmaxf(zVelMax, 0.5f)  * velMaxOverhead;
+  this.pidZ.pid.outputLimit = fmaxf(zVelMax, 0.5f) * velMaxOverhead;
 
   float cosyaw = cosf(state->attitude.yaw * (float)M_PI / 180.0f);
   float sinyaw = sinf(state->attitude.yaw * (float)M_PI / 180.0f);
 
-  float setp_body_x = setpoint->position.x * cosyaw + setpoint->position.y * sinyaw;
-  float setp_body_y = -setpoint->position.x * sinyaw + setpoint->position.y * cosyaw;
+  float setp_body_x =
+      setpoint->position.x * cosyaw + setpoint->position.y * sinyaw;
+  float setp_body_y =
+      -setpoint->position.x * sinyaw + setpoint->position.y * cosyaw;
 
   state_body_x = state->position.x * cosyaw + state->position.y * sinyaw;
   state_body_y = -state->position.x * sinyaw + state->position.y * cosyaw;
@@ -211,7 +251,7 @@ void positionController(float* thrust, attitude_t *attitude, const setpoint_t *s
   float globalvx = setpoint->velocity.x;
   float globalvy = setpoint->velocity.y;
 
-  //X, Y
+  // X, Y
   Axis3f setpoint_velocity;
   setpoint_velocity.x = setpoint->velocity.x;
   setpoint_velocity.y = setpoint->velocity.y;
@@ -227,20 +267,26 @@ void positionController(float* thrust, attitude_t *attitude, const setpoint_t *s
     setpoint_velocity.y = globalvy * cosyaw - globalvx * sinyaw;
   }
   if (setpoint->mode.z == modeAbs) {
-    setpoint_velocity.z = runPid(state->position.z, &this.pidZ, setpoint->position.z, DT);
+    setpoint_velocity.z =
+        runPid(state->position.z, &this.pidZ, setpoint->position.z, DT);
   }
 
   velocityController(thrust, attitude, &setpoint_velocity, state);
 }
 
-void velocityController(float* thrust, attitude_t *attitude, const Axis3f* setpoint_velocity,
-                                                             const state_t *state)
-{
+void velocityController(float *thrust, attitude_t *attitude,
+                        const Axis3f *setpoint_velocity, const state_t *state) {
+  if (resetVelIRequested) {
+    resetVelIRequested = false;
+    resetHorizontalVelocityPidIntegrals();
+  }
+
   this.pidVX.pid.outputLimit = pLimit * rpLimitOverhead;
   this.pidVY.pid.outputLimit = rLimit * rpLimitOverhead;
   // Set the output limit to the maximum thrust range
   this.pidVZ.pid.outputLimit = (UINT16_MAX / 2 / thrustScale);
-  //this.pidVZ.pid.outputLimit = (this.thrustBase - this.thrustMin) / thrustScale;
+  // this.pidVZ.pid.outputLimit = (this.thrustBase - this.thrustMin) /
+  // thrustScale;
 
   float cosyaw = cosf(state->attitude.yaw * (float)M_PI / 180.0f);
   float sinyaw = sinf(state->attitude.yaw * (float)M_PI / 180.0f);
@@ -248,26 +294,29 @@ void velocityController(float* thrust, attitude_t *attitude, const Axis3f* setpo
   state_body_vy = -state->velocity.x * sinyaw + state->velocity.y * cosyaw;
 
   // Roll and Pitch
-  attitude->pitch = -runPid(state_body_vx, &this.pidVX, setpoint_velocity->x, DT);
-  attitude->roll = -runPid(state_body_vy, &this.pidVY, setpoint_velocity->y, DT);
+  attitude->pitch =
+      -runPid(state_body_vx, &this.pidVX, setpoint_velocity->x, DT);
+  attitude->roll =
+      -runPid(state_body_vy, &this.pidVY, setpoint_velocity->y, DT);
 
-  attitude->roll  = constrain(attitude->roll,  -rLimit, rLimit);
+  attitude->roll = constrain(attitude->roll, -rLimit, rLimit);
   attitude->pitch = constrain(attitude->pitch, -pLimit, pLimit);
 
   // Thrust
-  float thrustRaw = runPid(state->velocity.z, &this.pidVZ, setpoint_velocity->z, DT);
+  float thrustRaw =
+      runPid(state->velocity.z, &this.pidVZ, setpoint_velocity->z, DT);
   // Scale the thrust and add feed forward term
-  *thrust = thrustRaw*thrustScale + this.thrustBase;
+  *thrust = thrustRaw * thrustScale + this.thrustBase;
   // Check for minimum thrust
   if (*thrust < this.thrustMin) {
     *thrust = this.thrustMin;
   }
-    // saturate
+  // saturate
   *thrust = constrain(*thrust, 0, UINT16_MAX);
 }
 
-void positionControllerResetAllPID(float xActual, float yActual, float zActual)
-{
+void positionControllerResetAllPID(float xActual, float yActual,
+                                   float zActual) {
   pidReset(&this.pidX.pid, xActual);
   pidReset(&this.pidY.pid, yActual);
   pidReset(&this.pidZ.pid, zActual);
@@ -461,7 +510,14 @@ LOG_GROUP_STOP(posCtl)
  */
 PARAM_GROUP_START(velCtlPid)
 /**
- * @brief Proportional gain for the velocity PID in the body-yaw-aligned X direction
+ * @brief Set to 1 to reset the horizontal velocity PID integral terms
+ */
+PARAM_ADD_WITH_CALLBACK(PARAM_UINT8, resetI, &resetVelI,
+                        &resetVelocityPidIntegralsParamCallback)
+
+/**
+ * @brief Proportional gain for the velocity PID in the body-yaw-aligned X
+ * direction
  */
 PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, vxKp, &this.pidVX.pid.kp)
 /**
@@ -469,16 +525,19 @@ PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, vxKp, &this.pidVX.pid.kp)
  */
 PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, vxKi, &this.pidVX.pid.ki)
 /**
- * @brief Derivative gain for the velocity PID in the body-yaw-aligned X direction
+ * @brief Derivative gain for the velocity PID in the body-yaw-aligned X
+ * direction
  */
 PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, vxKd, &this.pidVX.pid.kd)
 /**
- * @brief Feedforward gain for the velocity PID in the body-yaw-aligned X direction (in degrees per m/s)
+ * @brief Feedforward gain for the velocity PID in the body-yaw-aligned X
+ * direction (in degrees per m/s)
  */
 PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, vxKFF, &this.pidVX.pid.kff)
 
 /**
- * @brief Proportional gain for the velocity PID in the body-yaw-aligned Y direction
+ * @brief Proportional gain for the velocity PID in the body-yaw-aligned Y
+ * direction
  */
 PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, vyKp, &this.pidVY.pid.kp)
 /**
@@ -486,11 +545,13 @@ PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, vyKp, &this.pidVY.pid.kp)
  */
 PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, vyKi, &this.pidVY.pid.ki)
 /**
- * @brief Derivative gain for the velocity PID in the body-yaw-aligned Y direction
+ * @brief Derivative gain for the velocity PID in the body-yaw-aligned Y
+ * direction
  */
 PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, vyKd, &this.pidVY.pid.kd)
 /**
- * @brief Feedforward gain for the velocity PID in the body-yaw-aligned Y direction (in degrees per m/s)
+ * @brief Feedforward gain for the velocity PID in the body-yaw-aligned Y
+ * direction (in degrees per m/s)
  */
 PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, vyKFF, &this.pidVY.pid.kff)
 
@@ -507,7 +568,8 @@ PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, vzKi, &this.pidVZ.pid.ki)
  */
 PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, vzKd, &this.pidVZ.pid.kd)
 /**
- * @brief Feedforward gain for the velocity PID in the global direction (in degrees per m/s)
+ * @brief Feedforward gain for the velocity PID in the global direction (in
+ * degrees per m/s)
  */
 PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, vzKFF, &this.pidVZ.pid.kff)
 
@@ -520,7 +582,8 @@ PARAM_GROUP_STOP(velCtlPid)
  */
 PARAM_GROUP_START(posCtlPid)
 /**
- * @brief Proportional gain for the position PID in the body-yaw-aligned X direction
+ * @brief Proportional gain for the position PID in the body-yaw-aligned X
+ * direction
  */
 PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, xKp, &this.pidX.pid.kp)
 /**
@@ -528,16 +591,19 @@ PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, xKp, &this.pidX.pid.kp)
  */
 PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, xKi, &this.pidX.pid.ki)
 /**
- * @brief Derivative gain for the position PID in the body-yaw-aligned X direction
+ * @brief Derivative gain for the position PID in the body-yaw-aligned X
+ * direction
  */
 PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, xKd, &this.pidX.pid.kd)
 /**
- * @brief Feedforward gain for the position PID in the body-yaw-aligned X direction
+ * @brief Feedforward gain for the position PID in the body-yaw-aligned X
+ * direction
  */
 PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, xKff, &this.pidX.pid.kff)
 
 /**
- * @brief Proportional gain for the position PID in the body-yaw-aligned Y direction
+ * @brief Proportional gain for the position PID in the body-yaw-aligned Y
+ * direction
  */
 PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, yKp, &this.pidY.pid.kp)
 /**
@@ -545,11 +611,13 @@ PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, yKp, &this.pidY.pid.kp)
  */
 PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, yKi, &this.pidY.pid.ki)
 /**
- * @brief Derivative gain for the position PID in the body-yaw-aligned Y direction
+ * @brief Derivative gain for the position PID in the body-yaw-aligned Y
+ * direction
  */
 PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, yKd, &this.pidY.pid.kd)
 /**
- * @brief Feedforward gain for the position PID in the body-yaw-aligned Y direction
+ * @brief Feedforward gain for the position PID in the body-yaw-aligned Y
+ * direction
  */
 PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, yKff, &this.pidY.pid.kff)
 
@@ -566,7 +634,8 @@ PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, zKi, &this.pidZ.pid.ki)
  */
 PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, zKd, &this.pidZ.pid.kd)
 /**
- * @brief Feedforward gain for the position PID in the body-yaw-aligned Z direction
+ * @brief Feedforward gain for the position PID in the body-yaw-aligned Z
+ * direction
  */
 PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, zKff, &this.pidZ.pid.kff)
 
@@ -582,11 +651,11 @@ PARAM_ADD(PARAM_UINT16 | PARAM_PERSISTENT, thrustMin, &this.thrustMin)
 /**
  * @brief Roll absolute limit
  */
-PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, rLimit,  &rLimit)
+PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, rLimit, &rLimit)
 /**
  * @brief Pitch absolute limit
  */
-PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, pLimit,  &pLimit)
+PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, pLimit, &pLimit)
 /**
  * @brief Maximum body-yaw-aligned X velocity
  */
@@ -598,6 +667,6 @@ PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, yVelMax, &yVelMax)
 /**
  * @brief Maximum Z Velocity
  */
-PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, zVelMax,  &zVelMax)
+PARAM_ADD(PARAM_FLOAT | PARAM_PERSISTENT, zVelMax, &zVelMax)
 
 PARAM_GROUP_STOP(posCtlPid)
